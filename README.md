@@ -11,6 +11,7 @@ This project is not affiliated with or endorsed by Edenred.
 
 - [Security policy](SECURITY.md)
 - [Contributing guide](CONTRIBUTING.md)
+- [Safe browser capture guide](docs/safe-browser-capture.md)
 
 ## Features
 
@@ -88,21 +89,26 @@ Available presets:
 
 ## Notes About Login
 
-The current implementation is based on the older MyEdenred Portugal web API
-pattern that has been observed in prior community integrations:
+The current implementation now matches a sanitized browser capture taken on
+April 13, 2026 from the live Portugal portal:
 
 - login endpoint:
-  `https://www.myedenred.pt/edenred-customer/api/authenticate/default`
+  `https://www.myedenred.pt/edenred-customer/v2/authenticate/default`
 - cards endpoint:
-  `https://www.myedenred.pt/edenred-customer/api/protected/card/list`
+  `https://www.myedenred.pt/edenred-customer/v2/protected/card/list`
 - balance detail endpoint:
-  `https://www.myedenred.pt/edenred-customer/api/protected/card/{id}/accountmovement`
+  `https://www.myedenred.pt/edenred-customer/v2/protected/card/{id}/accountmovement`
 
-If those endpoints change or stop returning usable JSON, the integration also
-contains a fallback HTML balance parser for the observed dashboard selector
-`.card-balance.autoNumeric`. The authenticated HTML flow has not yet been
-validated end-to-end in this repository, so live browser capture may still be
-needed if Edenred changes the portal.
+The frontend app also sends these query params with API requests:
+
+- `appVersion=1.0`
+- `appType=PORTAL`
+- `channel=WEB`
+
+Protected JSON requests use the raw session token in the `Authorization`
+header. If those endpoints change or stop returning usable JSON, the integration
+also contains a fallback HTML balance parser for the observed dashboard
+selector `.card-balance.autoNumeric`.
 
 If MyEdenred adds mandatory CAPTCHA, forced OTP prompts, or significantly
 changes the login flow, this integration may need to be updated.

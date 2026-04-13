@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import json
@@ -10,8 +11,10 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from .const import (
+    API_BASE_URL,
     CARD_ACCOUNT_API_URL,
     CARDS_API_URL,
+    COMMON_API_PARAMS,
     LOGIN_API_URL,
     PORTAL_CARDS_URL,
     REQUEST_TIMEOUT_SECONDS,
@@ -137,6 +140,14 @@ def mask_card_number(value: object) -> str:
         return "unknown"
     suffix = digits[-4:] if len(digits) >= 4 else digits
     return f"**** {suffix}"
+
+
+def build_api_query_params(params: Mapping[str, object] | None = None) -> dict[str, object]:
+    """Attach the common MyEdenred query params used by the portal frontend."""
+    merged: dict[str, object] = dict(COMMON_API_PARAMS)
+    if params is not None:
+        merged.update(params)
+    return merged
 
 
 def extract_auth_token(payload: object) -> str:
@@ -348,7 +359,6 @@ class MyEdenredPtClient:
         status, payload = await self._async_request_json(
             "post",
             LOGIN_API_URL,
-            params={"appVersion": "1.0", "appType": "PORTAL", "channel": "WEB"},
             headers={"Content-Type": "application/json"},
             json={"userId": self._username, "password": self._password},
         )
@@ -425,8 +435,13 @@ class MyEdenredPtClient:
     ) -> tuple[int, str]:
         """Perform an HTTP request and return the response body as text."""
         headers = dict(kwargs.pop("headers", {}))
+        params = kwargs.pop("params", None)
         if self._token and "Authorization" not in headers:
             headers["Authorization"] = self._token
+        if url.startswith(API_BASE_URL):
+            kwargs["params"] = build_api_query_params(params)
+        elif params is not None:
+            kwargs["params"] = params
 
         try:
             async with self._session.request(

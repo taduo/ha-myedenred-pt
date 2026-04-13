@@ -13,6 +13,7 @@ from custom_components.myedenred_pt.client import (
     MyEdenredPtAuthError,
     MyEdenredPtClient,
     MyEdenredPtParseError,
+    build_api_query_params,
     extract_auth_token,
     extract_card_balance,
     extract_card_references,
@@ -21,6 +22,7 @@ from custom_components.myedenred_pt.client import (
     mask_card_number,
     parse_decimal_value,
 )
+from custom_components.myedenred_pt.const import CARD_ACCOUNT_API_URL, CARDS_API_URL
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 CARDS_PAYLOAD = json.loads((FIXTURES_DIR / "cards_list.json").read_text(encoding="utf-8"))
@@ -34,7 +36,7 @@ BALANCE_HTML = (FIXTURES_DIR / "balance_page.html").read_text(encoding="utf-8")
 
 
 def test_extract_auth_token_returns_token() -> None:
-    """The login parser should read the bearer token from the payload."""
+    """The login parser should read the auth token from the payload."""
     payload = {"data": {"token": "token-123"}}
 
     assert extract_auth_token(payload) == "token-123"
@@ -62,6 +64,16 @@ def test_mask_card_number_only_exposes_last_four_digits() -> None:
     """Card numbers should always be masked before being stored as attributes."""
     assert mask_card_number("1234 5678 9012 3456") == "**** 3456"
     assert mask_card_number(None) == "unknown"
+
+
+def test_build_api_query_params_merges_common_values() -> None:
+    """Every API request should include the common frontend query params."""
+    assert build_api_query_params({"_": "123"}) == {
+        "_": "123",
+        "appVersion": "1.0",
+        "appType": "PORTAL",
+        "channel": "WEB",
+    }
 
 
 def test_extract_card_references_returns_cards_from_payload() -> None:
@@ -163,3 +175,57 @@ async def test_async_fetch_cards_uses_html_fallback_when_api_parsing_fails() -> 
     assert result == expected
     client._async_login.assert_awaited_once()
     client._async_fetch_cards_via_html.assert_awaited_once()
+
+
+class _FakeResponse:
+    """Minimal async context manager used by the request wiring test."""
+
+    status = 200
+
+    async def text(self) -> str:
+        return "{}"
+
+    async def __aenter__(self) -> "_FakeResponse":
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+
+class _RecordingSession:
+    """Capture outbound aiohttp request arguments without doing network IO."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, dict[str, object]]] = []
+
+    def request(self, method: str, url: str, **kwargs: object) -> _FakeResponse:
+        self.calls.append((method, url, kwargs))
+        return _FakeResponse()
+
+
+@pytest.mark.asyncio
+async def test_async_request_text_adds_common_params_and_auth_header() -> None:
+    """Protected API calls should match the live frontend request shape."""
+    session = _RecordingSession()
+    client = MyEdenredPtClient(session, "user@example.com", "secret")
+    client._token = "token-123"
+
+    await client._async_request_text("get", CARDS_API_URL)
+    await client._async_request_text(
+        "get",
+        CARD_ACCOUNT_API_URL.format(card_id="101"),
+        params={"_": "123"},
+    )
+
+    assert session.calls[0][2]["headers"] == {"Authorization": "token-123"}
+    assert session.calls[0][2]["params"] == {
+        "appVersion": "1.0",
+        "appType": "PORTAL",
+        "channel": "WEB",
+    }
+    assert session.calls[1][2]["params"] == {
+        "_": "123",
+        "appVersion": "1.0",
+        "appType": "PORTAL",
+        "channel": "WEB",
+    }

@@ -12,11 +12,19 @@ VERSION = "0.1.0"
 CONF_USERNAME = "username"
 CONF_UPDATE_INTERVAL_MINUTES = "update_interval_minutes"
 
-LOGIN_API_URL = "https://www.myedenred.pt/edenred-customer/api/authenticate/default"
-CARDS_API_URL = "https://www.myedenred.pt/edenred-customer/api/protected/card/list"
-CARD_ACCOUNT_API_URL = (
-    "https://www.myedenred.pt/edenred-customer/api/protected/card/{card_id}/accountmovement"
-)
+API_BASE_URL = "https://www.myedenred.pt/edenred-customer/v2/"
+APP_VERSION = "1.0"
+APP_TYPE = "PORTAL"
+APP_CHANNEL = "WEB"
+COMMON_API_PARAMS = {
+    "appVersion": APP_VERSION,
+    "appType": APP_TYPE,
+    "channel": APP_CHANNEL,
+}
+
+LOGIN_API_URL = f"{API_BASE_URL}authenticate/default"
+CARDS_API_URL = f"{API_BASE_URL}protected/card/list"
+CARD_ACCOUNT_API_URL = f"{API_BASE_URL}protected/card/{{card_id}}/accountmovement"
 PORTAL_CARDS_URL = "https://www.myedenred.pt/#myCards"
 
 REQUEST_TIMEOUT_SECONDS = 20
@@ -84,8 +92,13 @@ def get_update_interval_from_options(options: Mapping[str, object]) -> timedelta
 
 
 __all__ = [
+    "API_BASE_URL",
+    "APP_CHANNEL",
+    "APP_TYPE",
+    "APP_VERSION",
     "CARD_ACCOUNT_API_URL",
     "CARDS_API_URL",
+    "COMMON_API_PARAMS",
     "CONF_UPDATE_INTERVAL_MINUTES",
     "CONF_USERNAME",
     "DEFAULT_UPDATE_INTERVAL_MINUTES",
