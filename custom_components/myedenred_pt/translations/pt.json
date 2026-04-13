@@ -1,0 +1,52 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ligar ao MyEdenred Portugal",
+        "description": "Introduza as credenciais que usa no portal MyEdenred Portugal.",
+        "data": {
+          "username": "Utilizador",
+          "password": "Palavra-passe"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Voltar a ligar ao MyEdenred Portugal",
+        "description": "Atualize as credenciais de {account}.",
+        "data": {
+          "username": "Utilizador",
+          "password": "Palavra-passe"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Falha ao ligar ao portal MyEdenred.",
+      "cannot_parse": "O login funcionou, mas não foi possível encontrar o saldo disponível.",
+      "invalid_auth": "Utilizador ou palavra-passe inválidos.",
+      "invalid_username": "O utilizador não pode estar vazio.",
+      "unknown": "Erro inesperado."
+    },
+    "abort": {
+      "already_configured": "Esta conta já está configurada.",
+      "reauth_successful": "A reautenticação foi concluída com sucesso.",
+      "wrong_account": "A reautenticação tem de usar a mesma conta."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opções do MyEdenred Portugal",
+        "description": "Escolha a frequência com que o Home Assistant deve atualizar o saldo MyEdenred.",
+        "data": {
+          "update_interval_minutes": "Intervalo de atualização"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "available_balance": {
+        "name": "Saldo disponível"
+      }
+    }
+  }
+}

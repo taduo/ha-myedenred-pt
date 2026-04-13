@@ -1,0 +1,16 @@
+{
+  "data": [
+    {
+      "id": 101,
+      "number": "1234567890123456",
+      "ownerName": "Alex Silva",
+      "status": "ACTIVE"
+    },
+    {
+      "id": 202,
+      "number": "5555444433332222",
+      "ownerName": "Alex Silva",
+      "status": "BLOCKED"
+    }
+  ]
+}

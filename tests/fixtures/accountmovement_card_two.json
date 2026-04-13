@@ -1,0 +1,12 @@
+{
+  "data": {
+    "account": {
+      "cardNumber": "5555444433332222",
+      "availableBalance": "40,00",
+      "cardHolderFirstName": "Alex",
+      "cardHolderLastName": "Silva",
+      "status": "BLOCKED"
+    },
+    "movementList": []
+  }
+}

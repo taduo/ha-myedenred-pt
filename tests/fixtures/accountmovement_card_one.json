@@ -1,0 +1,11 @@
+{
+  "data": {
+    "account": {
+      "cardNumber": "1234567890123456",
+      "availableBalance": 12.74,
+      "cardHolderFirstName": "Alex",
+      "cardHolderLastName": "Silva"
+    },
+    "movementList": []
+  }
+}
