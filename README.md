@@ -20,7 +20,7 @@ This project is not affiliated with or endorsed by Edenred.
 - Refreshes card balances on a configurable interval, with 30 minutes as the default
 - Retries automatically with a fresh login when the session expires
 - Creates one balance sensor per returned MyEdenred card
-- Installs through HACS as a custom repository
+- Available through HACS
 
 ## Current Scope
 
@@ -35,11 +35,19 @@ Out of scope for now:
 
 - recent transactions
 - card lifecycle actions
-- official HACS default listing
 
 ## Installation
 
-### HACS custom repository
+### HACS
+
+Once the integration appears in the HACS default catalog, search for
+`MyEdenred Portugal` in `HACS > Integrations`, install it, and restart Home
+Assistant.
+
+Until that external review and catalog scan are complete, install it as a HACS
+custom repository instead:
+
+[![Open this repository in Home Assistant HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=taduo&repository=ha-myedenred-pt&category=Integration)
 
 1. Open HACS in Home Assistant.
 2. Go to `Integrations`.
