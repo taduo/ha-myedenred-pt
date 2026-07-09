@@ -1,5 +1,7 @@
 {
   "name": "MyEdenred Portugal",
   "country": "PT",
+  "filename": "myedenred_pt.zip",
+  "zip_release": true,
   "render_readme": true
 }

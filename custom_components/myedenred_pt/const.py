@@ -7,7 +7,7 @@ from datetime import timedelta
 
 DOMAIN = "myedenred_pt"
 NAME = "MyEdenred Portugal"
-VERSION = "0.2.1b1"
+VERSION = "0.2.1b2"
 
 CONF_TOKEN = "token"
 CONF_TOKEN_OBTAINED_AT = "token_obtained_at"
