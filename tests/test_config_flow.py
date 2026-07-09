@@ -1,5 +1,6 @@
 """Tests for the MyEdenred Portugal config flow."""
 
+from datetime import datetime
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -16,7 +17,13 @@ from custom_components.myedenred_pt.client import (
     MyEdenredPtAuthError,
     MyEdenredPtMfaChallenge,
 )
-from custom_components.myedenred_pt.const import CONF_TOKEN, DOMAIN
+from custom_components.myedenred_pt.const import (
+    CONF_KEEP_ALIVE_INTERVAL_MINUTES,
+    CONF_TOKEN,
+    CONF_TOKEN_OBTAINED_AT,
+    CONF_UPDATE_INTERVAL_MINUTES,
+    DOMAIN,
+)
 
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
 
@@ -57,7 +64,9 @@ async def test_user_step_normalizes_username_and_preserves_password(hass) -> Non
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["title"] == "MyEdenred PT .com"
-    assert result["data"] == {
+    entry_data = dict(result["data"])
+    datetime.fromisoformat(entry_data.pop(CONF_TOKEN_OBTAINED_AT))
+    assert entry_data == {
         CONF_USERNAME: "user@example.com",
         CONF_PASSWORD: " secret ",
         CONF_TOKEN: "token-123",
@@ -262,7 +271,9 @@ async def test_reauth_uses_stored_password_and_replaces_token(hass) -> None:
 
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
-    assert entry.data == {
+    entry_data = dict(entry.data)
+    datetime.fromisoformat(entry_data.pop(CONF_TOKEN_OBTAINED_AT))
+    assert entry_data == {
         CONF_USERNAME: "user@example.com",
         CONF_PASSWORD: "old-password",
         CONF_TOKEN: "new-token",
@@ -334,3 +345,36 @@ async def test_reauth_can_replace_rejected_stored_password(hass) -> None:
     assert result["reason"] == "reauth_successful"
     assert entry.data[CONF_PASSWORD] == "new-password"
     assert entry.data[CONF_TOKEN] == "new-token"
+
+
+async def test_options_flow_stores_refresh_and_keep_alive_intervals(hass) -> None:
+    """Options should store both polling and experimental keep-alive intervals."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_USERNAME: "user@example.com",
+            CONF_PASSWORD: "secret",
+            CONF_TOKEN: "token-123",
+        },
+        unique_id="user@example.com",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "init"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_UPDATE_INTERVAL_MINUTES: "60",
+            CONF_KEEP_ALIVE_INTERVAL_MINUTES: "10",
+        },
+    )
+
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"] == {
+        CONF_UPDATE_INTERVAL_MINUTES: 60,
+        CONF_KEEP_ALIVE_INTERVAL_MINUTES: 10,
+    }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import UTC, datetime
 from typing import Any
 
 import voluptuous as vol
@@ -27,12 +28,17 @@ from .client import (
     MyEdenredPtParseError,
 )
 from .const import (
+    CONF_KEEP_ALIVE_INTERVAL_MINUTES,
     CONF_TOKEN,
+    CONF_TOKEN_OBTAINED_AT,
     CONF_UPDATE_INTERVAL_MINUTES,
+    DEFAULT_KEEP_ALIVE_INTERVAL_MINUTES,
     DEFAULT_UPDATE_INTERVAL_MINUTES,
     DOMAIN,
+    KEEP_ALIVE_INTERVAL_OPTION_LABELS,
     UPDATE_INTERVAL_OPTION_LABELS,
     is_valid_username,
+    normalize_keep_alive_interval_minutes,
     normalize_update_interval_minutes,
     normalize_username,
     title_for_username,
@@ -290,6 +296,7 @@ class MyEdenredPtConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         entry_data = {
             **data,
             CONF_TOKEN: client.token,
+            CONF_TOKEN_OBTAINED_AT: datetime.now(UTC).isoformat(),
         }
         title = title_for_username(data[CONF_USERNAME])
 
@@ -376,14 +383,24 @@ class MyEdenredPtOptionsFlowHandler(_OptionsFlowBase):
     ) -> config_entries.ConfigFlowResult:
         """Manage integration options."""
         if user_input is not None:
+            keep_alive_interval = normalize_keep_alive_interval_minutes(
+                user_input[CONF_KEEP_ALIVE_INTERVAL_MINUTES]
+            )
             return self.async_create_entry(
                 data={
+                    CONF_KEEP_ALIVE_INTERVAL_MINUTES: keep_alive_interval,
                     CONF_UPDATE_INTERVAL_MINUTES: normalize_update_interval_minutes(
                         user_input[CONF_UPDATE_INTERVAL_MINUTES]
-                    )
+                    ),
                 }
             )
 
+        current_keep_alive_interval = normalize_keep_alive_interval_minutes(
+            self.config_entry.options.get(
+                CONF_KEEP_ALIVE_INTERVAL_MINUTES,
+                DEFAULT_KEEP_ALIVE_INTERVAL_MINUTES,
+            )
+        )
         current_interval = normalize_update_interval_minutes(
             self.config_entry.options.get(
                 CONF_UPDATE_INTERVAL_MINUTES,
@@ -397,7 +414,11 @@ class MyEdenredPtOptionsFlowHandler(_OptionsFlowBase):
                     vol.Required(
                         CONF_UPDATE_INTERVAL_MINUTES,
                         default=str(current_interval),
-                    ): vol.In(UPDATE_INTERVAL_OPTION_LABELS)
+                    ): vol.In(UPDATE_INTERVAL_OPTION_LABELS),
+                    vol.Required(
+                        CONF_KEEP_ALIVE_INTERVAL_MINUTES,
+                        default=str(current_keep_alive_interval),
+                    ): vol.In(KEEP_ALIVE_INTERVAL_OPTION_LABELS),
                 }
             ),
         )

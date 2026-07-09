@@ -51,8 +51,9 @@
     "step": {
       "init": {
         "title": "MyEdenred Portugal options",
-        "description": "Choose how often Home Assistant should refresh your MyEdenred balance.",
+        "description": "Choose how often Home Assistant should refresh your MyEdenred balance. Optional session keep-alive sends a lightweight protected request with the stored token only; it may help with idle timeouts but cannot bypass an absolute server-side expiry.",
         "data": {
+          "keep_alive_interval_minutes": "Session keep-alive",
           "update_interval_minutes": "Refresh interval"
         }
       }

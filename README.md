@@ -19,18 +19,20 @@ This project is not affiliated with or endorsed by Edenred.
 - Native support for MyEdenred's 5-digit verification-code login
 - Stores your credentials and active session token in the Home Assistant config entry
 - Refreshes card balances on a configurable interval, with 30 minutes as the default
+- Optional token-only session keep-alive for testing idle session expiry
 - Starts a Home Assistant reauthentication flow when the session expires
 - Creates one balance sensor per returned MyEdenred card
 - Available through HACS
 
 ## Current Scope
 
-Version `0.2.0` currently includes:
+Version `0.2.1b1` currently includes:
 
 - available balance for each returned Portugal card
 - masked card number as a sensor attribute
 - card status when the upstream response provides it
 - configurable refresh interval from the options flow
+- optional lightweight session keep-alive from the options flow
 
 Out of scope for now:
 
@@ -93,14 +95,32 @@ Each sensor also exposes these attributes:
 ## Options
 
 After the integration is added, you can change the refresh interval from the
-integration options in Home Assistant.
+integration options in Home Assistant. You can also enable an experimental
+session keep-alive interval. The keep-alive uses only the stored session token
+and performs a lightweight protected card-list request; it never performs a
+password login and never requests a verification code in the background.
 
-Available presets:
+The keep-alive is disabled by default. To test whether MyEdenred uses an idle
+timeout, enable `Session keep-alive` at `5 minutes` or `10 minutes`, then leave
+Home Assistant running longer than the period where you previously saw expiry.
+If the session still expires after roughly the same number of hours, the portal
+is probably enforcing an absolute server-side token lifetime and Home Assistant
+reauthentication is the safest available flow.
+
+Balance refresh presets:
 
 - `15 minutes`
 - `30 minutes`
 - `60 minutes`
 - `120 minutes`
+
+Session keep-alive presets:
+
+- `Off`
+- `5 minutes`
+- `10 minutes`
+- `15 minutes`
+- `30 minutes`
 
 ## Notes About Login
 
@@ -134,6 +154,11 @@ For a challenge, the integration asks for MyEdenred's 5-digit code and exchanges
 it for the session token. Polling never attempts password login, so an expired
 token cannot cause unsolicited verification messages; it instead starts Home
 Assistant's standard reauthentication process.
+
+The optional session keep-alive follows the same rule: it only reuses the active
+token. If MyEdenred rejects that token, the integration starts reauthentication.
+It does not silently submit credentials, request a new OTP, or derive a new
+token.
 
 The password and session token are stored in the Home Assistant config entry.
 Protect Home Assistant backups and the `.storage` directory accordingly.

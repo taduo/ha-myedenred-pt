@@ -51,8 +51,9 @@
     "step": {
       "init": {
         "title": "Opções do MyEdenred Portugal",
-        "description": "Escolha a frequência com que o Home Assistant deve atualizar o saldo MyEdenred.",
+        "description": "Escolha a frequência com que o Home Assistant deve atualizar o saldo MyEdenred. A manutenção opcional da sessão envia apenas um pedido protegido leve com o token guardado; pode ajudar em timeouts por inatividade, mas não contorna uma expiração absoluta do servidor.",
         "data": {
+          "keep_alive_interval_minutes": "Manutenção da sessão",
           "update_interval_minutes": "Intervalo de atualização"
         }
       }

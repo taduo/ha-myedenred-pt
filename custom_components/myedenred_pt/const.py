@@ -7,10 +7,12 @@ from datetime import timedelta
 
 DOMAIN = "myedenred_pt"
 NAME = "MyEdenred Portugal"
-VERSION = "0.2.0"
+VERSION = "0.2.1b1"
 
 CONF_TOKEN = "token"
+CONF_TOKEN_OBTAINED_AT = "token_obtained_at"
 CONF_USERNAME = "username"
+CONF_KEEP_ALIVE_INTERVAL_MINUTES = "keep_alive_interval_minutes"
 CONF_UPDATE_INTERVAL_MINUTES = "update_interval_minutes"
 
 API_BASE_URL = "https://www.myedenred.pt/edenred-customer/v2/"
@@ -35,6 +37,12 @@ DEFAULT_UPDATE_INTERVAL_MINUTES = 30
 UPDATE_INTERVAL_MINUTES_OPTIONS: tuple[int, ...] = (15, 30, 60, 120)
 UPDATE_INTERVAL_OPTION_LABELS = {
     str(minutes): f"{minutes} min" for minutes in UPDATE_INTERVAL_MINUTES_OPTIONS
+}
+DEFAULT_KEEP_ALIVE_INTERVAL_MINUTES = 0
+KEEP_ALIVE_INTERVAL_MINUTES_OPTIONS: tuple[int, ...] = (0, 5, 10, 15, 30)
+KEEP_ALIVE_INTERVAL_OPTION_LABELS = {
+    str(minutes): ("Off" if minutes == 0 else f"{minutes} min")
+    for minutes in KEEP_ALIVE_INTERVAL_MINUTES_OPTIONS
 }
 
 PLATFORMS: list[str] = ["sensor"]
@@ -83,6 +91,19 @@ def normalize_update_interval_minutes(value: object) -> int:
     return minutes
 
 
+def normalize_keep_alive_interval_minutes(value: object) -> int:
+    """Normalize the configured session keep-alive interval."""
+    try:
+        minutes = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_KEEP_ALIVE_INTERVAL_MINUTES
+
+    if minutes not in KEEP_ALIVE_INTERVAL_MINUTES_OPTIONS:
+        return DEFAULT_KEEP_ALIVE_INTERVAL_MINUTES
+
+    return minutes
+
+
 def get_update_interval_from_options(options: Mapping[str, object]) -> timedelta:
     """Build the polling interval from config-entry options."""
     minutes = normalize_update_interval_minutes(
@@ -94,6 +115,21 @@ def get_update_interval_from_options(options: Mapping[str, object]) -> timedelta
     return timedelta(minutes=minutes)
 
 
+def get_keep_alive_interval_from_options(
+    options: Mapping[str, object],
+) -> timedelta | None:
+    """Build the optional session keep-alive interval from config-entry options."""
+    minutes = normalize_keep_alive_interval_minutes(
+        options.get(
+            CONF_KEEP_ALIVE_INTERVAL_MINUTES,
+            DEFAULT_KEEP_ALIVE_INTERVAL_MINUTES,
+        )
+    )
+    if minutes == 0:
+        return None
+    return timedelta(minutes=minutes)
+
+
 __all__ = [
     "API_BASE_URL",
     "APP_CHANNEL",
@@ -102,11 +138,16 @@ __all__ = [
     "CARD_ACCOUNT_API_URL",
     "CARDS_API_URL",
     "COMMON_API_PARAMS",
+    "CONF_KEEP_ALIVE_INTERVAL_MINUTES",
     "CONF_TOKEN",
+    "CONF_TOKEN_OBTAINED_AT",
     "CONF_UPDATE_INTERVAL_MINUTES",
     "CONF_USERNAME",
+    "DEFAULT_KEEP_ALIVE_INTERVAL_MINUTES",
     "DEFAULT_UPDATE_INTERVAL_MINUTES",
     "DOMAIN",
+    "KEEP_ALIVE_INTERVAL_OPTION_LABELS",
+    "KEEP_ALIVE_INTERVAL_MINUTES_OPTIONS",
     "LOGIN_API_URL",
     "LOGIN_CHALLENGE_API_URL",
     "LOGIN_CHALLENGE_RESEND_API_URL",
@@ -117,8 +158,10 @@ __all__ = [
     "SENSOR_KEY_AVAILABLE_BALANCE",
     "UPDATE_INTERVAL_OPTION_LABELS",
     "VERSION",
+    "get_keep_alive_interval_from_options",
     "get_update_interval_from_options",
     "is_valid_username",
+    "normalize_keep_alive_interval_minutes",
     "normalize_update_interval_minutes",
     "normalize_username",
     "title_for_username",

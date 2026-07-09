@@ -218,6 +218,15 @@ async def test_async_fetch_cards_uses_html_fallback_when_api_parsing_fails() -> 
     client._async_fetch_cards_via_html.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_async_keep_session_alive_requires_persisted_token() -> None:
+    """Keep-alive should never start a password login in the background."""
+    client = MyEdenredPtClient(object(), "user@example.com", "secret")
+
+    with pytest.raises(MyEdenredPtAuthError):
+        await client.async_keep_session_alive()
+
+
 class _FakeResponse:
     """Minimal async context manager used by the request wiring test."""
 
@@ -352,6 +361,40 @@ async def test_async_resend_mfa_replaces_challenge() -> None:
     assert session.calls[0][2]["json"] == {
         "authenticationMfaProcessId": "challenge-123"
     }
+
+
+@pytest.mark.asyncio
+async def test_async_keep_session_alive_uses_lightweight_card_list_request() -> None:
+    """Keep-alive should touch one protected endpoint with the raw token."""
+    session = _RecordingSession([(200, CARDS_PAYLOAD)])
+    client = MyEdenredPtClient(
+        session,
+        "user@example.com",
+        "secret",
+        token="token-123",
+    )
+
+    await client.async_keep_session_alive()
+
+    assert session.calls[0][0:2] == ("get", CARDS_API_URL)
+    assert session.calls[0][2]["headers"] == {"Authorization": "token-123"}
+
+
+@pytest.mark.asyncio
+async def test_async_keep_session_alive_clears_expired_token() -> None:
+    """A rejected keep-alive token should be cleared and require reauth."""
+    session = _RecordingSession([(401, {"message": ["expired"]})])
+    client = MyEdenredPtClient(
+        session,
+        "user@example.com",
+        "secret",
+        token="expired-token",
+    )
+
+    with pytest.raises(MyEdenredPtAuthError):
+        await client.async_keep_session_alive()
+
+    assert client.token is None
 
 
 @pytest.mark.asyncio

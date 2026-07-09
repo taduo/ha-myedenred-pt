@@ -424,6 +424,22 @@ class MyEdenredPtClient:
             self._clear_auth()
             raise
 
+    async def async_keep_session_alive(self) -> None:
+        """Touch a protected endpoint with the current token only."""
+        if self._token is None:
+            raise MyEdenredPtAuthError(
+                "MyEdenred requires a new session. Reauthentication is required."
+            )
+
+        status, _text = await self._async_request_text("get", CARDS_API_URL)
+        if status in {401, 403}:
+            self._clear_auth()
+            raise MyEdenredPtAuthError(_AUTH_FAILURE_MESSAGE)
+        if status != 200:
+            raise MyEdenredPtConnectionError(
+                f"MyEdenred keep-alive request failed with HTTP status {status}."
+            )
+
     def _clear_auth(self) -> None:
         """Clear cached authentication state."""
         self._token = None

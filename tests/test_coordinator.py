@@ -13,8 +13,10 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.myedenred_pt.client import MyEdenredPtAuthError
 from custom_components.myedenred_pt.const import (
+    CONF_KEEP_ALIVE_INTERVAL_MINUTES,
     CONF_UPDATE_INTERVAL_MINUTES,
     DOMAIN,
+    get_keep_alive_interval_from_options,
     get_update_interval_from_options,
 )
 from custom_components.myedenred_pt.coordinator import (
@@ -32,6 +34,18 @@ def test_get_config_entry_update_interval_uses_selected_option() -> None:
     assert get_update_interval_from_options(
         {CONF_UPDATE_INTERVAL_MINUTES: 60}
     ) == timedelta(minutes=60)
+
+
+def test_get_keep_alive_interval_defaults_to_disabled() -> None:
+    """Keep-alive should be opt-in while the token timeout is still unknown."""
+    assert get_keep_alive_interval_from_options({}) is None
+
+
+def test_get_keep_alive_interval_uses_selected_option() -> None:
+    """The configured keep-alive value should become a timedelta."""
+    assert get_keep_alive_interval_from_options(
+        {CONF_KEEP_ALIVE_INTERVAL_MINUTES: 10}
+    ) == timedelta(minutes=10)
 
 
 async def test_auth_failure_triggers_home_assistant_reauthentication(hass) -> None:
