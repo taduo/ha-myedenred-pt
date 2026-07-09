@@ -25,7 +25,7 @@ This project is not affiliated with or endorsed by Edenred.
 
 ## Current Scope
 
-Beta version `0.2.0b1` currently includes:
+Version `0.2.0` currently includes:
 
 - available balance for each returned Portugal card
 - masked card number as a sensor attribute
