@@ -1,10 +1,24 @@
 """Unit tests for the MyEdenred Portugal coordinator helpers."""
 
 from datetime import timedelta
+from unittest.mock import AsyncMock
 
+import pytest
+
+pytest.importorskip("homeassistant")
+pytest.importorskip("pytest_homeassistant_custom_component")
+
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.myedenred_pt.client import MyEdenredPtAuthError
 from custom_components.myedenred_pt.const import (
     CONF_UPDATE_INTERVAL_MINUTES,
+    DOMAIN,
     get_update_interval_from_options,
+)
+from custom_components.myedenred_pt.coordinator import (
+    MyEdenredPtDataUpdateCoordinator,
 )
 
 
@@ -18,3 +32,15 @@ def test_get_config_entry_update_interval_uses_selected_option() -> None:
     assert get_update_interval_from_options(
         {CONF_UPDATE_INTERVAL_MINUTES: 60}
     ) == timedelta(minutes=60)
+
+
+async def test_auth_failure_triggers_home_assistant_reauthentication(hass) -> None:
+    """Coordinator auth failures should enter Home Assistant's reauth flow."""
+    entry = MockConfigEntry(domain=DOMAIN, data={})
+    entry.add_to_hass(hass)
+    client = AsyncMock()
+    client.async_fetch_cards.side_effect = MyEdenredPtAuthError("expired")
+    coordinator = MyEdenredPtDataUpdateCoordinator(hass, entry, client)
+
+    with pytest.raises(ConfigEntryAuthFailed):
+        await coordinator._async_update_data()

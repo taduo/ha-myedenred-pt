@@ -1,6 +1,6 @@
 """Unit tests for the MyEdenred Portugal sensor helpers."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from custom_components.myedenred_pt.client import MyEdenredCardBalance
@@ -21,7 +21,7 @@ def test_build_balance_attributes_includes_expected_metadata() -> None:
 
     attributes = build_balance_attributes(
         data,
-        datetime(2026, 4, 13, 14, 31, 47, tzinfo=timezone.utc),
+        datetime(2026, 4, 13, 14, 31, 47, tzinfo=UTC),
     )
 
     assert attributes["balance_text"] == "12,74"
