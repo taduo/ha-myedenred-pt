@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to MyEdenred Portugal",
-        "description": "Enter the credentials you use in the MyEdenred Portugal portal.",
+        "description": "Enter the credentials you use in the MyEdenred Portugal portal. MyEdenred may send you a verification code.",
         "data": {
           "username": "Username",
           "password": "Password"
@@ -11,23 +11,39 @@
       },
       "reauth_confirm": {
         "title": "Reconnect to MyEdenred Portugal",
-        "description": "Update the credentials for {account}.",
+        "description": "The session for {account} has expired. Continue to ask MyEdenred to send a new verification code.",
+        "data": {}
+      },
+      "reauth_credentials": {
+        "title": "Update the MyEdenred password",
+        "description": "The stored password for {account} was rejected. Enter the account's current password.",
         "data": {
-          "username": "Username",
           "password": "Password"
+        }
+      },
+      "mfa": {
+        "title": "Enter the MyEdenred verification code",
+        "description": "{challenge_message}\n\nEnter the 5-digit code. Remaining resend attempts: {resend_tries}.",
+        "data": {
+          "otp": "Verification code",
+          "resend_code": "Send a new code"
         }
       }
     },
     "error": {
       "cannot_connect": "Failed to connect to the MyEdenred portal.",
       "cannot_parse": "Signed in successfully, but could not find the available balance.",
+      "cannot_resend": "MyEdenred could not send another verification code. Cancel and restart reauthentication if the challenge has expired.",
+      "code_resent": "A new verification code was sent.",
       "invalid_auth": "Invalid username or password.",
+      "invalid_code": "Enter the valid 5-digit verification code sent by MyEdenred.",
       "invalid_username": "Username cannot be empty.",
       "unknown": "Unexpected error."
     },
     "abort": {
       "already_configured": "This account is already configured.",
       "reauth_successful": "Reauthentication was successful.",
+      "unknown": "The authentication flow is no longer active. Please start again.",
       "wrong_account": "Reauthentication must use the same account."
     }
   },

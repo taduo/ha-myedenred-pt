@@ -1,7 +1,7 @@
 """Unit tests for the MyEdenred Portugal client helpers."""
 
-from decimal import Decimal
 import json
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -12,9 +12,12 @@ from custom_components.myedenred_pt.client import (
     MyEdenredDashboardData,
     MyEdenredPtAuthError,
     MyEdenredPtClient,
+    MyEdenredPtMfaChallenge,
+    MyEdenredPtMfaError,
     MyEdenredPtParseError,
     build_api_query_params,
     extract_auth_token,
+    extract_authentication_result,
     extract_card_balance,
     extract_card_references,
     extract_cards_from_html,
@@ -22,10 +25,18 @@ from custom_components.myedenred_pt.client import (
     mask_card_number,
     parse_decimal_value,
 )
-from custom_components.myedenred_pt.const import CARD_ACCOUNT_API_URL, CARDS_API_URL
+from custom_components.myedenred_pt.const import (
+    CARD_ACCOUNT_API_URL,
+    CARDS_API_URL,
+    LOGIN_API_URL,
+    LOGIN_CHALLENGE_API_URL,
+    LOGIN_CHALLENGE_RESEND_API_URL,
+)
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
-CARDS_PAYLOAD = json.loads((FIXTURES_DIR / "cards_list.json").read_text(encoding="utf-8"))
+CARDS_PAYLOAD = json.loads(
+    (FIXTURES_DIR / "cards_list.json").read_text(encoding="utf-8")
+)
 ACCOUNT_ONE_PAYLOAD = json.loads(
     (FIXTURES_DIR / "accountmovement_card_one.json").read_text(encoding="utf-8")
 )
@@ -46,6 +57,31 @@ def test_extract_auth_token_raises_auth_error_for_internal_code() -> None:
     """The login parser should map upstream auth failures to the generic message."""
     with pytest.raises(MyEdenredPtAuthError):
         extract_auth_token({"internalCode": "AUTH-001", "message": ["invalid"]})
+
+
+def test_extract_authentication_result_returns_mfa_challenge() -> None:
+    """The login parser should expose the MFA challenge without its secrets."""
+    result = extract_authentication_result(
+        {
+            "data": {
+                "challengeId": 123456,
+                "challengeMessage": "Code sent to a masked contact",
+                "resendTries": 3,
+            }
+        }
+    )
+
+    assert result == MyEdenredPtMfaChallenge(
+        challenge_id=123456,
+        challenge_message="Code sent to a masked contact",
+        resend_tries=3,
+    )
+
+
+def test_extract_authentication_result_rejects_unknown_payload() -> None:
+    """Unexpected successful login payloads should not be accepted."""
+    with pytest.raises(MyEdenredPtParseError):
+        extract_authentication_result({"data": {"customer": {}}})
 
 
 def test_parse_decimal_value_supports_strings_and_numbers() -> None:
@@ -118,33 +154,35 @@ def test_extract_cards_from_html_raises_when_missing() -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_fetch_cards_retries_after_auth_error() -> None:
-    """Expired sessions should trigger one fresh login and then retry."""
-    expected = MyEdenredDashboardData(
-        cards=(
-            MyEdenredCardBalance(
-                key="api_101",
-                card_id="101",
-                masked_card_number="**** 3456",
-                card_status="ACTIVE",
-                balance=Decimal("12.74"),
-                balance_raw="12,74",
-                data_source="api",
-            ),
-        )
-    )
+async def test_async_fetch_cards_requires_persisted_token() -> None:
+    """Polling without a token should request reauth without sending an OTP."""
     client = MyEdenredPtClient(object(), "user@example.com", "secret")
-    client._token = "expired-token"
-    client._async_login = AsyncMock()
+    client._async_fetch_cards_via_api = AsyncMock()
+
+    with pytest.raises(MyEdenredPtAuthError):
+        await client.async_fetch_cards()
+
+    client._async_fetch_cards_via_api.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_async_fetch_cards_clears_expired_token_without_login() -> None:
+    """Rejected session tokens should not start MFA in the background."""
+    client = MyEdenredPtClient(
+        object(),
+        "user@example.com",
+        "secret",
+        token="expired-token",
+    )
     client._async_fetch_cards_via_api = AsyncMock(
-        side_effect=[MyEdenredPtAuthError("expired"), expected]
+        side_effect=MyEdenredPtAuthError("expired")
     )
 
-    result = await client.async_fetch_cards()
+    with pytest.raises(MyEdenredPtAuthError):
+        await client.async_fetch_cards()
 
-    assert result == expected
-    client._async_login.assert_awaited_once()
-    assert client._async_fetch_cards_via_api.await_count == 2
+    assert client.token is None
+    client._async_fetch_cards_via_api.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -163,8 +201,12 @@ async def test_async_fetch_cards_uses_html_fallback_when_api_parsing_fails() -> 
             ),
         )
     )
-    client = MyEdenredPtClient(object(), "user@example.com", "secret")
-    client._async_login = AsyncMock()
+    client = MyEdenredPtClient(
+        object(),
+        "user@example.com",
+        "secret",
+        token="token-123",
+    )
     client._async_fetch_cards_via_api = AsyncMock(
         side_effect=MyEdenredPtParseError("bad payload")
     )
@@ -173,17 +215,18 @@ async def test_async_fetch_cards_uses_html_fallback_when_api_parsing_fails() -> 
     result = await client.async_fetch_cards()
 
     assert result == expected
-    client._async_login.assert_awaited_once()
     client._async_fetch_cards_via_html.assert_awaited_once()
 
 
 class _FakeResponse:
     """Minimal async context manager used by the request wiring test."""
 
-    status = 200
+    def __init__(self, status: int = 200, text: str = "{}") -> None:
+        self.status = status
+        self._text = text
 
     async def text(self) -> str:
-        return "{}"
+        return self._text
 
     async def __aenter__(self) -> "_FakeResponse":
         return self
@@ -195,20 +238,132 @@ class _FakeResponse:
 class _RecordingSession:
     """Capture outbound aiohttp request arguments without doing network IO."""
 
-    def __init__(self) -> None:
+    def __init__(self, responses: list[tuple[int, object]] | None = None) -> None:
         self.calls: list[tuple[str, str, dict[str, object]]] = []
+        self.responses = list(responses or [])
 
     def request(self, method: str, url: str, **kwargs: object) -> _FakeResponse:
         self.calls.append((method, url, kwargs))
+        if self.responses:
+            status, payload = self.responses.pop(0)
+            return _FakeResponse(status, json.dumps(payload))
         return _FakeResponse()
+
+
+@pytest.mark.asyncio
+async def test_async_begin_authentication_returns_challenge() -> None:
+    """Password login should retain the challenge for the config flow."""
+    session = _RecordingSession(
+        [
+            (
+                200,
+                {
+                    "data": {
+                        "challengeId": 123456,
+                        "challengeMessage": "Code sent",
+                        "resendTries": 3,
+                    }
+                },
+            )
+        ]
+    )
+    client = MyEdenredPtClient(session, "user@example.com", "secret")
+
+    challenge = await client.async_begin_authentication()
+
+    assert challenge == MyEdenredPtMfaChallenge(
+        challenge_id=123456,
+        challenge_message="Code sent",
+        resend_tries=3,
+    )
+    assert client.token is None
+    assert session.calls[0][0:2] == ("post", LOGIN_API_URL)
+    assert session.calls[0][2]["json"] == {
+        "userId": "user@example.com",
+        "password": "secret",
+    }
+
+
+@pytest.mark.asyncio
+async def test_async_begin_authentication_supports_direct_token() -> None:
+    """Accounts without MFA should retain their direct login token."""
+    session = _RecordingSession([(200, {"data": {"token": "token-123"}})])
+    client = MyEdenredPtClient(session, "user@example.com", "secret")
+
+    challenge = await client.async_begin_authentication()
+
+    assert challenge is None
+    assert client.token == "token-123"
+
+
+@pytest.mark.asyncio
+async def test_async_complete_mfa_uses_captured_request_shape() -> None:
+    """MFA completion should send all fields required by the portal."""
+    session = _RecordingSession([(200, {"data": {"token": "token-456"}})])
+    client = MyEdenredPtClient(session, "user@example.com", "secret")
+
+    token = await client.async_complete_mfa(123456, "12345")
+
+    assert token == "token-456"
+    assert client.token == "token-456"
+    assert session.calls[0][0:2] == ("post", LOGIN_CHALLENGE_API_URL)
+    assert session.calls[0][2]["json"] == {
+        "userId": "user@example.com",
+        "password": "secret",
+        "authenticationMfaProcessId": 123456,
+        "token": "12345",
+    }
+
+
+@pytest.mark.asyncio
+async def test_async_complete_mfa_rejects_invalid_code() -> None:
+    """An upstream MFA rejection should be distinguishable in the flow."""
+    session = _RecordingSession([(409, {"internalCode": "invalid-code"})])
+    client = MyEdenredPtClient(session, "user@example.com", "secret")
+
+    with pytest.raises(MyEdenredPtMfaError):
+        await client.async_complete_mfa("challenge-123", "00000")
+
+
+@pytest.mark.asyncio
+async def test_async_resend_mfa_replaces_challenge() -> None:
+    """Resending should return the replacement challenge identifier."""
+    session = _RecordingSession(
+        [
+            (
+                200,
+                {
+                    "data": {
+                        "challengeId": "challenge-456",
+                        "challengeMessage": "New code sent",
+                        "resendTries": 2,
+                    }
+                },
+            )
+        ]
+    )
+    client = MyEdenredPtClient(session, "user@example.com", "secret")
+
+    challenge = await client.async_resend_mfa("challenge-123")
+
+    assert challenge.challenge_id == "challenge-456"
+    assert challenge.resend_tries == 2
+    assert session.calls[0][0:2] == ("post", LOGIN_CHALLENGE_RESEND_API_URL)
+    assert session.calls[0][2]["json"] == {
+        "authenticationMfaProcessId": "challenge-123"
+    }
 
 
 @pytest.mark.asyncio
 async def test_async_request_text_adds_common_params_and_auth_header() -> None:
     """Protected API calls should match the live frontend request shape."""
     session = _RecordingSession()
-    client = MyEdenredPtClient(session, "user@example.com", "secret")
-    client._token = "token-123"
+    client = MyEdenredPtClient(
+        session,
+        "user@example.com",
+        "secret",
+        token="token-123",
+    )
 
     await client._async_request_text("get", CARDS_API_URL)
     await client._async_request_text(

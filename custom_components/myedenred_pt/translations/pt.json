@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Ligar ao MyEdenred Portugal",
-        "description": "Introduza as credenciais que usa no portal MyEdenred Portugal.",
+        "description": "Introduza as credenciais que usa no portal MyEdenred Portugal. O MyEdenred poderá enviar-lhe um código de verificação.",
         "data": {
           "username": "Utilizador",
           "password": "Palavra-passe"
@@ -11,23 +11,39 @@
       },
       "reauth_confirm": {
         "title": "Voltar a ligar ao MyEdenred Portugal",
-        "description": "Atualize as credenciais de {account}.",
+        "description": "A sessão de {account} expirou. Continue para pedir ao MyEdenred um novo código de verificação.",
+        "data": {}
+      },
+      "reauth_credentials": {
+        "title": "Atualizar a palavra-passe do MyEdenred",
+        "description": "A palavra-passe guardada para {account} foi rejeitada. Introduza a palavra-passe atual da conta.",
         "data": {
-          "username": "Utilizador",
           "password": "Palavra-passe"
+        }
+      },
+      "mfa": {
+        "title": "Introduzir o código de verificação do MyEdenred",
+        "description": "{challenge_message}\n\nIntroduza o código de 5 dígitos. Tentativas de reenvio restantes: {resend_tries}.",
+        "data": {
+          "otp": "Código de verificação",
+          "resend_code": "Enviar um novo código"
         }
       }
     },
     "error": {
       "cannot_connect": "Falha ao ligar ao portal MyEdenred.",
       "cannot_parse": "O login funcionou, mas não foi possível encontrar o saldo disponível.",
+      "cannot_resend": "O MyEdenred não conseguiu enviar outro código de verificação. Cancele e reinicie a reautenticação se o desafio tiver expirado.",
+      "code_resent": "Foi enviado um novo código de verificação.",
       "invalid_auth": "Utilizador ou palavra-passe inválidos.",
+      "invalid_code": "Introduza o código de verificação válido de 5 dígitos enviado pelo MyEdenred.",
       "invalid_username": "O utilizador não pode estar vazio.",
       "unknown": "Erro inesperado."
     },
     "abort": {
       "already_configured": "Esta conta já está configurada.",
       "reauth_successful": "A reautenticação foi concluída com sucesso.",
+      "unknown": "O processo de autenticação já não está ativo. Inicie novamente.",
       "wrong_account": "A reautenticação tem de usar a mesma conta."
     }
   },

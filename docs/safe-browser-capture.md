@@ -34,9 +34,10 @@ Do not upload a full HAR file. HAR files often contain secrets.
 We only need confirmation of:
 
 1. the login endpoint
-2. the cards list endpoint
-3. the balance detail endpoint
-4. whether the site uses JSON or only HTML for the balance
+2. the MFA challenge and resend endpoints, when present
+3. the cards list endpoint
+4. the balance detail endpoint
+5. whether the site uses JSON or only HTML for the balance
 
 ## Browser Steps
 
@@ -52,6 +53,8 @@ These steps work in Chrome, Edge, and most Chromium browsers.
 8. Sign in normally.
 9. After login finishes, look for requests matching these likely paths:
    - `/edenred-customer/v2/authenticate/default`
+   - `/edenred-customer/v2/authenticate/default/challenge`
+   - `/edenred-customer/v2/authenticate/challenge/resend`
    - `/edenred-customer/v2/protected/card/list`
    - `/edenred-customer/v2/protected/card/<card_id>/accountmovement`
 10. If those do not appear, clear the filter and look for:
@@ -90,6 +93,26 @@ Response JSON keys: data, message
 Response data keys: token, customer, appVersionInfo, onBoardApplied
 Authorization style after login: raw token header
 ```
+
+For MFA-enabled accounts, the first login response can safely be described as:
+
+```text
+POST /edenred-customer/v2/authenticate/default
+Request JSON keys: userId, password
+Response data keys: challengeId, challengeMessage, resendTries
+
+POST /edenred-customer/v2/authenticate/default/challenge
+Request JSON keys: userId, password, authenticationMfaProcessId, token
+Response data keys: token, customer, appVersionInfo, onBoardApplied
+
+POST /edenred-customer/v2/authenticate/challenge/resend
+Request JSON keys: authenticationMfaProcessId
+Response data keys: challengeId, challengeMessage, resendTries
+```
+
+Do not include the challenge ID, verification code, challenge message, or
+returned token. Even masked destination messages should be replaced with
+`<masked_destination>`.
 
 Unsafe:
 
@@ -159,6 +182,16 @@ Login
 - Request JSON keys:
 - Response top-level keys:
 - Response data keys:
+
+MFA challenge
+- Challenge required: yes/no
+- Validation method and path:
+- Validation request JSON keys:
+- Validation response top-level keys:
+- Validation response data keys:
+- Resend method and path:
+- Resend request JSON keys:
+- Resend response data keys:
 
 Cards list
 - Method:

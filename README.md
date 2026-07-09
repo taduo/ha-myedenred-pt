@@ -16,15 +16,16 @@ This project is not affiliated with or endorsed by Edenred.
 ## Features
 
 - UI-based setup from `Settings > Devices & Services`
-- Stores your credentials in the Home Assistant config entry
+- Native support for MyEdenred's 5-digit verification-code login
+- Stores your credentials and active session token in the Home Assistant config entry
 - Refreshes card balances on a configurable interval, with 30 minutes as the default
-- Retries automatically with a fresh login when the session expires
+- Starts a Home Assistant reauthentication flow when the session expires
 - Creates one balance sensor per returned MyEdenred card
 - Available through HACS
 
 ## Current Scope
 
-Version `0.1.0` currently includes:
+Beta version `0.2.0b1` currently includes:
 
 - available balance for each returned Portugal card
 - masked card number as a sensor attribute
@@ -69,7 +70,13 @@ custom repository instead:
 2. Click `Add Integration`.
 3. Search for `MyEdenred Portugal`.
 4. Enter your MyEdenred `Username` and `Password`.
-5. Finish the flow and wait for the first refresh.
+5. Enter the 5-digit verification code sent by MyEdenred.
+6. Finish the flow and wait for the first refresh.
+
+If the session later expires, Home Assistant marks the integration as requiring
+reauthentication. Open the integration, confirm that MyEdenred should send a
+new code, and enter that code. If the account password has changed, the same
+flow prompts for the new password before sending the code.
 
 The integration creates one sensor per returned card:
 
@@ -98,10 +105,14 @@ Available presets:
 ## Notes About Login
 
 The current implementation now matches a sanitized browser capture taken on
-April 13, 2026 from the live Portugal portal:
+July 9, 2026 from the live Portugal portal:
 
 - login endpoint:
   `https://www.myedenred.pt/edenred-customer/v2/authenticate/default`
+- verification endpoint:
+  `https://www.myedenred.pt/edenred-customer/v2/authenticate/default/challenge`
+- verification-code resend endpoint:
+  `https://www.myedenred.pt/edenred-customer/v2/authenticate/challenge/resend`
 - cards endpoint:
   `https://www.myedenred.pt/edenred-customer/v2/protected/card/list`
 - balance detail endpoint:
@@ -118,8 +129,17 @@ header. If those endpoints change or stop returning usable JSON, the integration
 also contains a fallback HTML balance parser for the observed dashboard
 selector `.card-balance.autoNumeric`.
 
-If MyEdenred adds mandatory CAPTCHA, forced OTP prompts, or significantly
-changes the login flow, this integration may need to be updated.
+Password login may return either a session token directly or an MFA challenge.
+For a challenge, the integration asks for MyEdenred's 5-digit code and exchanges
+it for the session token. Polling never attempts password login, so an expired
+token cannot cause unsolicited verification messages; it instead starts Home
+Assistant's standard reauthentication process.
+
+The password and session token are stored in the Home Assistant config entry.
+Protect Home Assistant backups and the `.storage` directory accordingly.
+
+If MyEdenred adds mandatory CAPTCHA or significantly changes the login flow,
+this integration may need to be updated.
 
 ## Local Validation
 

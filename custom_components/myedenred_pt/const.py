@@ -7,8 +7,9 @@ from datetime import timedelta
 
 DOMAIN = "myedenred_pt"
 NAME = "MyEdenred Portugal"
-VERSION = "0.1.0"
+VERSION = "0.2.0b1"
 
+CONF_TOKEN = "token"
 CONF_USERNAME = "username"
 CONF_UPDATE_INTERVAL_MINUTES = "update_interval_minutes"
 
@@ -23,6 +24,8 @@ COMMON_API_PARAMS = {
 }
 
 LOGIN_API_URL = f"{API_BASE_URL}authenticate/default"
+LOGIN_CHALLENGE_API_URL = f"{LOGIN_API_URL}/challenge"
+LOGIN_CHALLENGE_RESEND_API_URL = f"{API_BASE_URL}authenticate/challenge/resend"
 CARDS_API_URL = f"{API_BASE_URL}protected/card/list"
 CARD_ACCOUNT_API_URL = f"{API_BASE_URL}protected/card/{{card_id}}/accountmovement"
 PORTAL_CARDS_URL = "https://www.myedenred.pt/#myCards"
@@ -99,11 +102,14 @@ __all__ = [
     "CARD_ACCOUNT_API_URL",
     "CARDS_API_URL",
     "COMMON_API_PARAMS",
+    "CONF_TOKEN",
     "CONF_UPDATE_INTERVAL_MINUTES",
     "CONF_USERNAME",
     "DEFAULT_UPDATE_INTERVAL_MINUTES",
     "DOMAIN",
     "LOGIN_API_URL",
+    "LOGIN_CHALLENGE_API_URL",
+    "LOGIN_CHALLENGE_RESEND_API_URL",
     "NAME",
     "PLATFORMS",
     "PORTAL_CARDS_URL",

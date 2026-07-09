@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import json
 import logging
 import re
+from collections.abc import Mapping
+from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
 from .const import (
@@ -16,6 +16,8 @@ from .const import (
     CARDS_API_URL,
     COMMON_API_PARAMS,
     LOGIN_API_URL,
+    LOGIN_CHALLENGE_API_URL,
+    LOGIN_CHALLENGE_RESEND_API_URL,
     PORTAL_CARDS_URL,
     REQUEST_TIMEOUT_SECONDS,
     normalize_username,
@@ -27,6 +29,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 _AUTH_FAILURE_MESSAGE = "MyEdenred rejected the credentials provided for this account."
+_MFA_FAILURE_MESSAGE = "MyEdenred rejected the verification code."
 _BALANCE_PATTERN = re.compile(r"[-+]?\d[\d.,]*")
 _TAG_PATTERN = re.compile(r"<[^>]+>")
 
@@ -37,6 +40,10 @@ class MyEdenredPtError(Exception):
 
 class MyEdenredPtAuthError(MyEdenredPtError):
     """Raised when authentication fails."""
+
+
+class MyEdenredPtMfaError(MyEdenredPtAuthError):
+    """Raised when an MFA challenge cannot be completed."""
 
 
 class MyEdenredPtConnectionError(MyEdenredPtError):
@@ -55,6 +62,15 @@ class MyEdenredCardReference:
     masked_card_number: str
     card_status: str | None
     owner_name: str | None
+
+
+@dataclass(frozen=True)
+class MyEdenredPtMfaChallenge:
+    """MFA challenge returned by the authentication endpoint."""
+
+    challenge_id: str | int
+    challenge_message: str
+    resend_tries: int
 
 
 @dataclass(frozen=True)
@@ -99,7 +115,9 @@ def parse_decimal_value(raw_value: object) -> Decimal:
 
     cleaned = raw_value.replace("\xa0", " ").replace("€", "").replace(" ", "").strip()
     if not cleaned:
-        raise MyEdenredPtParseError("Expected a numeric balance value, but the field was empty.")
+        raise MyEdenredPtParseError(
+            "Expected a numeric balance value, but the field was empty."
+        )
 
     if "," in cleaned and "." in cleaned:
         decimal_separator = "," if cleaned.rfind(",") > cleaned.rfind(".") else "."
@@ -142,7 +160,9 @@ def mask_card_number(value: object) -> str:
     return f"**** {suffix}"
 
 
-def build_api_query_params(params: Mapping[str, object] | None = None) -> dict[str, object]:
+def build_api_query_params(
+    params: Mapping[str, object] | None = None,
+) -> dict[str, object]:
     """Attach the common MyEdenred query params used by the portal frontend."""
     merged: dict[str, object] = dict(COMMON_API_PARAMS)
     if params is not None:
@@ -150,8 +170,10 @@ def build_api_query_params(params: Mapping[str, object] | None = None) -> dict[s
     return merged
 
 
-def extract_auth_token(payload: object) -> str:
-    """Extract the auth token from the login response."""
+def extract_authentication_result(
+    payload: object,
+) -> str | MyEdenredPtMfaChallenge:
+    """Extract a token or MFA challenge from an authentication response."""
     if not isinstance(payload, dict):
         raise MyEdenredPtParseError("Unexpected login payload returned by MyEdenred.")
 
@@ -160,13 +182,47 @@ def extract_auth_token(payload: object) -> str:
 
     data = payload.get("data")
     if not isinstance(data, dict):
-        raise MyEdenredPtParseError("MyEdenred login payload did not include token data.")
+        raise MyEdenredPtParseError(
+            "MyEdenred login payload did not include authentication data."
+        )
 
     token = data.get("token")
-    if not isinstance(token, str) or not token.strip():
-        raise MyEdenredPtParseError("MyEdenred login payload did not include a usable token.")
+    if isinstance(token, str) and token.strip():
+        return token.strip()
 
-    return token.strip()
+    challenge_id = data.get("challengeId")
+    valid_numeric_id = isinstance(challenge_id, int) and not isinstance(
+        challenge_id, bool
+    )
+    valid_text_id = isinstance(challenge_id, str) and bool(challenge_id.strip())
+    if valid_numeric_id or valid_text_id:
+        challenge_message = data.get("challengeMessage")
+        resend_tries = data.get("resendTries")
+        return MyEdenredPtMfaChallenge(
+            challenge_id=challenge_id.strip()
+            if isinstance(challenge_id, str)
+            else challenge_id,
+            challenge_message=challenge_message.strip()
+            if isinstance(challenge_message, str)
+            else "",
+            resend_tries=max(resend_tries, 0)
+            if isinstance(resend_tries, int)
+            else 0,
+        )
+
+    raise MyEdenredPtParseError(
+        "MyEdenred login payload did not include a usable token or MFA challenge."
+    )
+
+
+def extract_auth_token(payload: object) -> str:
+    """Extract the auth token from an authentication response."""
+    result = extract_authentication_result(payload)
+    if not isinstance(result, str):
+        raise MyEdenredPtParseError(
+            "MyEdenred login payload required an additional MFA challenge."
+        )
+    return result
 
 
 def extract_card_references(payload: object) -> tuple[MyEdenredCardReference, ...]:
@@ -199,7 +255,9 @@ def extract_card_references(payload: object) -> tuple[MyEdenredCardReference, ..
         )
 
     if not cards:
-        raise MyEdenredPtParseError("MyEdenred did not return any cards for this account.")
+        raise MyEdenredPtParseError(
+            "MyEdenred did not return any cards for this account."
+        )
 
     return tuple(cards)
 
@@ -218,7 +276,9 @@ def extract_card_balance(
 
     account = data.get("account", data)
     if not isinstance(account, dict):
-        raise MyEdenredPtParseError("MyEdenred account payload did not include account details.")
+        raise MyEdenredPtParseError(
+            "MyEdenred account payload did not include account details."
+        )
 
     balance = parse_decimal_value(account.get("availableBalance"))
     holder_first_name = account.get("cardHolderFirstName")
@@ -246,7 +306,11 @@ def extract_card_balance(
 
 def extract_cards_from_html(html: str) -> tuple[MyEdenredCardBalance, ...]:
     """Extract card balances from the observed authenticated HTML dashboard."""
-    balance_texts = _extract_class_values(html, "card-balance", required_class="autoNumeric")
+    balance_texts = _extract_class_values(
+        html,
+        "card-balance",
+        required_class="autoNumeric",
+    )
     if not balance_texts:
         raise MyEdenredPtParseError(
             "Logged in successfully, but could not find the available balance element."
@@ -264,7 +328,9 @@ def extract_cards_from_html(html: str) -> tuple[MyEdenredCardBalance, ...]:
 
         balance_raw = match.group(0)
         balance = parse_decimal_value(balance_raw)
-        card_number_text = number_texts[index - 1] if index - 1 < len(number_texts) else None
+        card_number_text = (
+            number_texts[index - 1] if index - 1 < len(number_texts) else None
+        )
         card_status = status_texts[index - 1] if index - 1 < len(status_texts) else None
         owner_name = owner_texts[index - 1] if index - 1 < len(owner_texts) else None
 
@@ -316,22 +382,33 @@ class MyEdenredPtClient:
 
     def __init__(
         self,
-        session: "ClientSession",
+        session: ClientSession,
         username: str,
         password: str,
+        *,
+        token: str | None = None,
     ) -> None:
         """Initialize the client."""
         self._session = session
         self._username = normalize_username(username)
         self._password = password
-        self._token: str | None = None
+        self._token = (
+            token.strip() if isinstance(token, str) and token.strip() else None
+        )
+
+    @property
+    def token(self) -> str | None:
+        """Return the active session token."""
+        return self._token
 
     async def async_fetch_cards(self) -> MyEdenredDashboardData:
         """Fetch balance data for all cards in the configured account."""
-        for attempt in range(2):
-            if self._token is None:
-                await self._async_login()
+        if self._token is None:
+            raise MyEdenredPtAuthError(
+                "MyEdenred requires a new session. Reauthentication is required."
+            )
 
+        try:
             try:
                 return await self._async_fetch_cards_via_api()
             except MyEdenredPtParseError as api_err:
@@ -341,21 +418,20 @@ class MyEdenredPtClient:
                 )
                 try:
                     return await self._async_fetch_cards_via_html()
-                except MyEdenredPtParseError:
-                    raise api_err
-            except MyEdenredPtAuthError:
-                self._clear_auth()
-                if attempt == 1:
-                    raise
-
-        raise MyEdenredPtAuthError(_AUTH_FAILURE_MESSAGE)
+                except MyEdenredPtParseError as html_err:
+                    raise api_err from html_err
+        except MyEdenredPtAuthError:
+            self._clear_auth()
+            raise
 
     def _clear_auth(self) -> None:
         """Clear cached authentication state."""
         self._token = None
 
-    async def _async_login(self) -> None:
-        """Authenticate against the MyEdenred login endpoint."""
+    async def async_begin_authentication(
+        self,
+    ) -> MyEdenredPtMfaChallenge | None:
+        """Start authentication and return an MFA challenge when required."""
         status, payload = await self._async_request_json(
             "post",
             LOGIN_API_URL,
@@ -363,14 +439,82 @@ class MyEdenredPtClient:
             json={"userId": self._username, "password": self._password},
         )
 
-        if status in {400, 401, 403}:
+        if status in {400, 401, 403, 409}:
             raise MyEdenredPtAuthError(_AUTH_FAILURE_MESSAGE)
         if status != 200:
             raise MyEdenredPtConnectionError(
                 f"MyEdenred login failed with HTTP status {status}."
             )
 
-        self._token = extract_auth_token(payload)
+        result = extract_authentication_result(payload)
+        if isinstance(result, str):
+            self._token = result
+            return None
+        return result
+
+    async def async_complete_mfa(
+        self,
+        challenge_id: str | int,
+        code: str,
+    ) -> str:
+        """Complete an MFA challenge and return the new session token."""
+        status, payload = await self._async_request_json(
+            "post",
+            LOGIN_CHALLENGE_API_URL,
+            headers={"Content-Type": "application/json"},
+            json={
+                "userId": self._username,
+                "password": self._password,
+                "authenticationMfaProcessId": challenge_id,
+                "token": code,
+            },
+        )
+
+        if status in {400, 401, 403, 409}:
+            raise MyEdenredPtMfaError(_MFA_FAILURE_MESSAGE)
+        if status != 200:
+            raise MyEdenredPtConnectionError(
+                f"MyEdenred MFA validation failed with HTTP status {status}."
+            )
+
+        try:
+            self._token = extract_auth_token(payload)
+        except MyEdenredPtAuthError as err:
+            raise MyEdenredPtMfaError(_MFA_FAILURE_MESSAGE) from err
+        return self._token
+
+    async def async_resend_mfa(
+        self,
+        challenge_id: str | int,
+    ) -> MyEdenredPtMfaChallenge:
+        """Request a replacement MFA code."""
+        status, payload = await self._async_request_json(
+            "post",
+            LOGIN_CHALLENGE_RESEND_API_URL,
+            headers={"Content-Type": "application/json"},
+            json={"authenticationMfaProcessId": challenge_id},
+        )
+
+        if status in {400, 401, 403, 409}:
+            raise MyEdenredPtMfaError(
+                "MyEdenred could not resend the verification code."
+            )
+        if status != 200:
+            raise MyEdenredPtConnectionError(
+                f"MyEdenred MFA resend failed with HTTP status {status}."
+            )
+
+        try:
+            result = extract_authentication_result(payload)
+        except MyEdenredPtAuthError as err:
+            raise MyEdenredPtMfaError(
+                "MyEdenred could not resend the verification code."
+            ) from err
+        if isinstance(result, str):
+            raise MyEdenredPtParseError(
+                "MyEdenred returned a token instead of a replacement MFA challenge."
+            )
+        return result
 
     async def _async_fetch_cards_via_api(self) -> MyEdenredDashboardData:
         """Fetch card balances using the JSON API."""
@@ -393,7 +537,8 @@ class MyEdenredPtClient:
                 raise MyEdenredPtAuthError(_AUTH_FAILURE_MESSAGE)
             if detail_status != 200:
                 raise MyEdenredPtConnectionError(
-                    f"MyEdenred card detail request failed with HTTP status {detail_status}."
+                    "MyEdenred card detail request failed with HTTP status "
+                    f"{detail_status}."
                 )
 
             balances.append(extract_card_balance(card, detail_payload))
